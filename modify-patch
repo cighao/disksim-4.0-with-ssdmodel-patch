@@ -1,0 +1,557 @@
+diff -ruN disksim-4.0/dixtrac/Makefile disksim-4.0/dixtrac/Makefile
+--- disksim-4.0/dixtrac/Makefile	2008-05-15 14:37:34.000000000 +0800
++++ disksim-4.0/dixtrac/Makefile	2016-03-21 12:58:34.000000000 +0800
+@@ -53,17 +53,19 @@
+ ST_LDFLAGS = -L$(STHREADS) -lst
+ ST_CFLAGS = -I$(ST_DIR)/obj
+ 
+-LDFLAGS  = -L. -lm -l$(LIBNAME) -ldxtools \
++LDFLAGS  = -L. -l$(LIBNAME) -ldxtools \
+ 	$(LIBDISKSIM_LDFLAGS) \
+ 	$(MEMSMODEL_LDFLAGS) \
+ 	$(DISKMODEL_LDFLAGS) \
++	$(SSDMODEL_LDFLAGS) \
+ 	$(LIBPARAM_LDFLAGS) \
+ 	$(LIBDDBG_LDFLAGS) \
+-	$(ST_LDFLAGS)
++	$(ST_LDFLAGS) -lm
+ 
+ CFLAGS   = -Wall -g -MD -I. $(DEFINES) -I$(STHREADS) $(DMINCLUDES) \
+ 	$(LIBDISKSIM_CFLAGS) \
+-	$(DISKMODEL_CFLAGS) $(LIBPARAM_CFLAGS) $(LIBDDBG_CFLAGS) 
++	$(DISKMODEL_CFLAGS) $(LIBPARAM_CFLAGS) $(LIBDDBG_CFLAGS) \
++	$(SSDMODEL_LDFLAGS)
+ 
+ 
+ all: all-redirect
+diff -ruN disksim-4.0/dixtrac/Makefile~ disksim-4.0/dixtrac/Makefile~
+--- disksim-4.0/dixtrac/Makefile~	1970-01-01 08:00:00.000000000 +0800
++++ disksim-4.0/dixtrac/Makefile~	2016-03-21 12:53:58.000000000 +0800
+@@ -0,0 +1,168 @@
++# DIXtrac - Automated Disk Extraction Tool
++# Authors: Jiri Schindler, John Bucy, Greg Ganger
++#
++# Copyright (c) of Carnegie Mellon University, 1999-2005.
++#
++# Permission to reproduce, use, and prepare derivative works of
++# this software for internal use is granted provided the copyright
++# and "No Warranty" statements are included with all reproductions
++# and derivative works. This software may also be redistributed
++# without charge provided that the copyright and "No Warranty"
++# statements are included in all redistributions.
++#
++# NO WARRANTY. THIS SOFTWARE IS FURNISHED ON AN "AS IS" BASIS.
++# CARNEGIE MELLON UNIVERSITY MAKES NO WARRANTIES OF ANY KIND, EITHER
++# EXPRESSED OR IMPLIED AS TO THE MATTER INCLUDING, BUT NOT LIMITED
++# TO: WARRANTY OF FITNESS FOR PURPOSE OR MERCHANTABILITY, EXCLUSIVITY
++# OF RESULTS OR RESULTS OBTAINED FROM USE OF THIS SOFTWARE. CARNEGIE
++# MELLON UNIVERSITY DOES NOT MAKE ANY WARRANTY OF ANY KIND WITH RESPECT
++# TO FREEDOM FROM PATENT, TRADEMARK, OR COPYRIGHT INFRINGEMENT.
++
++AR     =  ar
++CC     =  gcc
++RM     =  rm
++WC     =  wc
++PERL   =  perl
++
++# -DWRITE_CHECK   - makes sure no writes occur on the disk
++# -DSILENT        - silent mode which does not print so many messages
++# -DMEASURE_TIME  - prints out the timings of parameter retrievals
++# -DEDEBUG        - support for debug feature -d option to dixtrac
++# -DDISKINFO_ONLY - when set, it does not use the diskmodel input files
++
++DEFINES = -DMEASURE_TIME -DRAWLAYOUT_SUPPORT -DDEBUG #-DSILENT
++
++# if -DDEBUG is used, add debug.c file into the SRCFILES list
++# The use of this option is not advisable.
++
++PROG     = dixtrac 
++LIBNAME  = dxtools
++
++LAYOUT   = dxlayout
++IDLER    = dxidler
++ALIGN    = dxalign
++REPLAY   = dxreplay
++
++ST_DIR   = st-1.7
++STHREADS = $(ST_DIR)/obj
++
++include .paths
++
++LIBFILE  = lib$(LIBNAME).a
++
++ST_LDFLAGS = -L$(STHREADS) -lst
++ST_CFLAGS = -I$(ST_DIR)/obj
++
++LDFLAGS  = -L. -l$(LIBNAME) -ldxtools \
++	$(LIBDISKSIM_LDFLAGS) \
++	$(MEMSMODEL_LDFLAGS) \
++	$(DISKMODEL_LDFLAGS) \
++	$(SSDMODEL_LDFLAGS) \
++	$(LIBPARAM_LDFLAGS) \
++	$(LIBDDBG_LDFLAGS) \
++	$(ST_LDFLAGS) -lm
++
++CFLAGS   = -Wall -g -MD -I. $(DEFINES) -I$(STHREADS) $(DMINCLUDES) \
++	$(LIBDISKSIM_CFLAGS) \
++	$(DISKMODEL_CFLAGS) $(LIBPARAM_CFLAGS) $(LIBDDBG_CFLAGS) \
++	$(SSDMODEL_LDFLAGS) 
++
++
++all: all-redirect
++
++
++SRCFILES = dixtrac.c paramfile_gen.c debug.c 
++OBJFILES = $(SRCFILES:%.c=%.o)
++
++LIBSRCS  = build_scsi.c cache.c cache_modepage.c dxtools.c disksim_diskmap.c \
++	   extract_layout.c extract_params.c linear_fit.c mechanics.c \
++	   mtbrc.c print_bscsi.c raw_layout.c read_diskspec.c scsi_conv.c \
++           trace_gen.c \
++           inout.c ide_extract.c binsearch.c
++
++all: $(STHREADS) $(TARGETS)
++
++
++LIBOBJS  = $(LIBSRCS:%.c=%.o)
++
++CONFIGFILES = config.cache config.status config.log configure \
++                    ../include/config.h
++
++-include *.d
++
++TARGETS = dx_layout dx_mech dx_seeks dx_skews_simple dx_rest dx_stat \
++	dx_skew_curve \
++	dxcachectl dxreplay \
++
++# set the ostype for building sthreads
++OSTYPE = $(shell uname -s | awk '{print tolower($$1)}')
++
++all-redirect: $(STHREADS) $(TARGETS)
++
++$(PROG): $(OBJFILES) $(LIBFILE)
++	$(CC)  -o $@ $(OBJFILES) $(LDFLAGS)
++
++dx_stat: dx_stat.o libdxtools.a
++	$(CC) -o $@ $< $(LDFLAGS)
++
++dx_misc: dx_misc.o libdxtools.a
++	$(CC) -o $@ $< $(LDFLAGS) 
++
++dx_layout: dx_layout.o libdxtools.a
++	$(CC) -o $@ dx_layout.o $(LDFLAGS)
++
++dx_mech: dx_mech.o libdxtools.a
++	$(CC) -o $@ dx_mech.o $(LDFLAGS)
++
++dx_seeks: dx_seeks.o libdxtools.a
++	$(CC) -o $@ $< $(LDFLAGS)
++
++dx_skews_simple: dx_skews_simple.o libdxtools.a
++	$(CC) -o $@ dx_skews_simple.o $(LDFLAGS)
++
++dx_skew_curve: dx_skew_curve.o libdxtools.a
++	$(CC) -o $@ $< $(LDFLAGS)
++
++
++dx_rest: dx_rest.o libdxtools.a
++	$(CC) -o $@ dx_rest.o $(LDFLAGS)
++
++$(LAYOUT): $(LIBFILE) $(LAYOUT).o
++#	$(CC) $(CFLAGS) $(CPPFLAGS) -c $(LAYOUT).c
++	$(CC) $(LDFLAGS) -o $@ $(LAYOUT).o $(LIBS)
++
++$(IDLER): $(LIBFILE) $(IDLER).o
++#	$(CC) $(CFLAGS) $(CPPFLAGS) -c $(IDLER).c
++	$(CC) $(LDFLAGS) -o $@ $(IDLER).o $(LIBS)
++
++$(ALIGN): $(LIBFILE) $(ALIGN).o
++	$(CC) $(LDFLAGS) -o $@ $(ALIGN).o $(LIBS)
++
++$(REPLAY): $(LIBFILE) $(REPLAY).o
++	$(CC) -o $@ $(REPLAY).o $(LDFLAGS) $(LIBS) $(RPLYLIBS) 
++
++dxcachectl: $(LIBFILE) dxcachectl.o
++	$(CC) -o $@ dxcachectl.o $(LDFLAGS) $(LIBS) $(RPLYLIBS)	 
++
++lib $(LIBFILE): $(LIBOBJS)
++	$(AR) -crs $(LIBFILE) $(LIBOBJS)
++
++$(STHREADS):
++	make -C $(ST_DIR) STATIC_ONLY=yes $(OSTYPE)-debug
++
++.c.o:
++	$(CC) $(CFLAGS) $(CPPFLAGS) -c $<
++
++clean:
++	$(RM) -f core *.o $(PROG) $(LIBFILE) $(LAYOUT) $(ALIGN) $(REPLAY) $(TARGETS)
++
++distclean: clean
++	$(RM) -f *.d
++	make -C $(ST_DIR) clean
++
++clean_config: clean distclean
++	$(RM) -f $(CONFIGFILES)
++
++count:
++	$(WC) $(SRCFILES)
++
+diff -ruN disksim-4.0/dixtrac/.paths disksim-4.0/dixtrac/.paths
+--- disksim-4.0/dixtrac/.paths	2007-03-08 09:29:22.000000000 +0800
++++ disksim-4.0/dixtrac/.paths	2016-03-21 12:35:20.000000000 +0800
+@@ -39,3 +39,10 @@
+ export MEMSMODEL_CFLAGS=-I$(MEMSMODEL_INCL)
+ export MEMSMODEL_LDPATH=$(MEMSMODEL_PREFIX)/lib
+ export MEMSMODEL_LDFLAGS=-L$(MEMSMODEL_LDPATH) -lmemsmodel
++
++# path to ssdmodel
++export SSDMODEL_PREFIX=../ssdmodel
++export SSDMODEL_INCL=$(SSDMODEL_PREFIX)/include
++export SSDMODEL_CFLAGS=-I$(SSDMODEL_INCL)
++export SSDMODEL_LDPATH=$(SSDMODEL_PREFIX)/lib
++export SSDMODEL_LDFLAGS=-L$(SSDMODEL_LDPATH) -lssdmodel
+diff -ruN disksim-4.0/dixtrac/.paths~ disksim-4.0/dixtrac/.paths~
+--- disksim-4.0/dixtrac/.paths~	1970-01-01 08:00:00.000000000 +0800
++++ disksim-4.0/dixtrac/.paths~	2007-03-08 09:29:22.000000000 +0800
+@@ -0,0 +1,41 @@
++# libdisksim 
++export LIBDISKSIM_PREFIX=../
++export LIBDISKSIM_INCL=$(LIBDISKSIM_PREFIX)/include
++export LIBDISKSIM_CFLAGS=-I$(LIBDISKSIM_INCL)
++export LIBDISKSIM_LDPATH=$(LIBDISKSIM_PREFIX)/lib
++export LIBDISKSIM_LDFLAGS=-L$(LIBDISKSIM_LDPATH) -ldisksim
++
++# disksim internals (for memsmodel, etc)
++export DISKSIM_PREFIX=../src/
++export DISKSIM_INCL=$(DISKSIM_PREFIX)/
++export DISKSIM_CFLAGS=-I$(DISKSIM_INCL)
++export DISKSIM_LDPATH=$(DISKSIM_PREFIX)/
++export DISKSIM_LDFLAGS=-L$(DISKSIM_LDPATH) -ldisksim
++
++# path to diskmodel
++export DISKMODEL_PREFIX=../diskmodel
++export DISKMODEL_INCL=$(DISKMODEL_PREFIX)/include
++export DISKMODEL_CFLAGS=-I$(DISKMODEL_INCL)
++export DISKMODEL_LDPATH=$(DISKMODEL_PREFIX)/lib
++export DISKMODEL_LDFLAGS=-L$(DISKMODEL_LDPATH) -ldiskmodel
++
++# path to libparam
++export LIBPARAM_PREFIX=../libparam
++export LIBPARAM_INCL=$(LIBPARAM_PREFIX)/include
++export LIBPARAM_CFLAGS=-I$(LIBPARAM_INCL)
++export LIBPARAM_LDPATH=$(LIBPARAM_PREFIX)/lib
++export LIBPARAM_LDFLAGS=-L$(LIBPARAM_LDPATH) -lparam
++
++# libtrace
++export LIBDDBG_PREFIX=../libddbg
++export LIBDDBG_INCL=$(LIBDDBG_PREFIX)/include
++export LIBDDBG_CFLAGS=-I$(LIBDDBG_INCL)
++export LIBDDBG_LDPATH=$(LIBDDBG_PREFIX)/lib
++export LIBDDBG_LDFLAGS=-L$(LIBDDBG_LDPATH) -lddbg
++
++# path to memsmodel
++export MEMSMODEL_PREFIX=../memsmodel
++export MEMSMODEL_INCL=$(MEMSMODEL_PREFIX)/include
++export MEMSMODEL_CFLAGS=-I$(MEMSMODEL_INCL)
++export MEMSMODEL_LDPATH=$(MEMSMODEL_PREFIX)/lib
++export MEMSMODEL_LDFLAGS=-L$(MEMSMODEL_LDPATH) -lmemsmodel
+diff -ruN disksim-4.0/memsmodel/Makefile disksim-4.0/memsmodel/Makefile
+--- disksim-4.0/memsmodel/Makefile	2008-05-12 05:30:54.000000000 +0800
++++ disksim-4.0/memsmodel/Makefile	2016-03-21 12:32:56.000000000 +0800
+@@ -78,7 +78,7 @@
+ 	$(CC) -c $(CFLAGS) $< -o $@
+ 
+ mems_seektest: mems_seektest.o libmems_internals.a
+-	$(CC) -o $@ mems_seektest.o $(LDFLAGS) $(CFLAGS) -lmems_internals
++	$(CC) -o $@ mems_seektest.o $(CFLAGS) -lmems_internals $(LDFLAGS)
+ 
+ libmems_internals.a: mems_internals.o mems_piecewise_seek.o mems_hong_seek.o
+ 	ar cru $@ mems_internals.o mems_piecewise_seek.o mems_hong_seek.o
+diff -ruN disksim-4.0/memsmodel/Makefile~ disksim-4.0/memsmodel/Makefile~
+--- disksim-4.0/memsmodel/Makefile~	1970-01-01 08:00:00.000000000 +0800
++++ disksim-4.0/memsmodel/Makefile~	2008-05-12 05:30:54.000000000 +0800
+@@ -0,0 +1,114 @@
++
++# DiskSim Storage Subsystem Simulation Environment (Version 4.0)
++# Revision Authors: John Bucy, Greg Ganger
++# Contributors: John Griffin, Jiri Schindler, Steve Schlosser
++#
++# Copyright (c) of Carnegie Mellon University, 2001-2008.
++#
++# This software is being provided by the copyright holders under the
++# following license. By obtaining, using and/or copying this software,
++# you agree that you have read, understood, and will comply with the
++# following terms and conditions:
++#
++# Permission to reproduce, use, and prepare derivative works of this
++# software is granted provided the copyright and "No Warranty" statements
++# are included with all reproductions and derivative works and associated
++# documentation. This software may also be redistributed without charge
++# provided that the copyright and "No Warranty" statements are included
++# in all redistributions.
++#
++# NO WARRANTY. THIS SOFTWARE IS FURNISHED ON AN "AS IS" BASIS.
++# CARNEGIE MELLON UNIVERSITY MAKES NO WARRANTIES OF ANY KIND, EITHER
++# EXPRESSED OR IMPLIED AS TO THE MATTER INCLUDING, BUT NOT LIMITED
++# TO: WARRANTY OF FITNESS FOR PURPOSE OR MERCHANTABILITY, EXCLUSIVITY
++# OF RESULTS OR RESULTS OBTAINED FROM USE OF THIS SOFTWARE. CARNEGIE
++# MELLON UNIVERSITY DOES NOT MAKE ANY WARRANTY OF ANY KIND WITH RESPECT
++# TO FREEDOM FROM PATENT, TRADEMARK, OR COPYRIGHT INFRINGEMENT.
++# COPYRIGHT HOLDERS WILL BEAR NO LIABILITY FOR ANY USE OF THIS SOFTWARE
++# OR DOCUMENTATION.
++
++include .paths
++
++LDFLAGS = -lm -L.
++
++DEBUG_OFLAGS = -g -DASSERTS # -DDEBUG=1
++PROF_OFLAGS = -g -DASSERTS -p
++GPROF_OFLAGS = -g -DASSERTS -pg
++CFLAGS = $(DEBUG_OFLAGS) $(DISKSIM_CFLAGS) -I../ -I$(DISKSIM_PREFIX)/src
++
++CC = gcc -Wall -Wno-unused -MD
++CP = cp -p
++
++all: modules mems_seektest libmemsmodel.a
++
++clean:
++	rm -f *.o mems_seektest core libmems_internals.a libmemsmodel.a
++	$(MAKE) -C modules clean
++	$(MAKE) -C tests clean
++
++realclean: clean
++	rm -f *.d .depend
++	$(MAKE) -C modules clean
++	$(MAKE) -C tests clean
++
++distclean: realclean
++	rm -f *~
++	rm -rf lib include
++	$(MAKE) -C modules distclean
++	$(MAKE) -C tests distclean
++
++.PHONY: modules
++
++modules: modules/*.o ;
++
++modules/modules.h modules/*.o:
++	$(MAKE) -C modules
++	mkdir -p include/memsmodel/modules
++	$(CP) mems_disksim.h mems_internals.h mems_mapping.h \
++          mems_piecewise_seek.h mems_global.h mems_buffer.h include/memsmodel
++	$(CP) modules/*.h include/memsmodel/modules
++
++-include *.d
++
++MEMS_SRC = mems_seektest.c mems_internals.c mems_piecewise_seek.c mems_hong_seek.c mems_buffer.c
++
++MEMS_OBJ = $(MEMS_SRC:.c=.o) 
++
++$(MEMS_OBJ): %.o: %.c
++	$(CC) -c $(CFLAGS) $< -o $@
++
++mems_seektest: mems_seektest.o libmems_internals.a
++	$(CC) -o $@ mems_seektest.o $(LDFLAGS) $(CFLAGS) -lmems_internals
++
++libmems_internals.a: mems_internals.o mems_piecewise_seek.o mems_hong_seek.o
++	ar cru $@ mems_internals.o mems_piecewise_seek.o mems_hong_seek.o
++	ranlib $@
++	mkdir -p lib
++	$(CP) libmems_internals.a lib
++
++libmemsmodel.a: mems_disksim.o mems_event.o mems_mapping.o mems_internals.o mems_piecewise_seek.o mems_hong_seek.o mems_buffer.o modules/memsmodel_mems_param.o
++	ar cru $@ mems_disksim.o mems_event.o mems_mapping.o mems_internals.o mems_piecewise_seek.o mems_hong_seek.o mems_buffer.o modules/memsmodel_mems_param.o
++	ranlib $@
++	mkdir -p lib
++	$(CP) libmemsmodel.a lib
++
++
++
++########################################################################
++
++# rule to automatically generate dependencies from source files
++#%.d: %.c
++#	set -e; $(CC-DEP) -M $(CPPFLAGS) $<  \
++#		| sed 's/\($*\)\.o[ :]*/\1.o $@ : /g' > $@; \
++#		[ -s $@ ] 2>/dev/null >/dev/null || rm -f $@
++
++
++# this is a little less aggressive and annoying than the above
++depend: .depend 
++
++.depend: *.c *.h
++	$(MAKE) -C modules
++	rm -f .depend
++	$(foreach file, $(DISKSIM_SRC), \
++		$(CC-DEP) $(CFLAGS) -M $(file) >> .depend; )
++
+diff -ruN disksim-4.0/src/Makefile disksim-4.0/src/Makefile
+--- disksim-4.0/src/Makefile	2016-03-23 16:16:38.677176000 +0800
++++ disksim-4.0/src/Makefile	2016-03-21 12:34:38.000000000 +0800
+@@ -32,9 +32,9 @@
+ 
+ include .paths
+ 
+-LDFLAGS = -lm -L. -ldisksim $(DISKMODEL_LDFLAGS) $(MEMSMODEL_LDFLAGS) \
++LDFLAGS = -L. -ldisksim $(DISKMODEL_LDFLAGS) $(MEMSMODEL_LDFLAGS) \
+                             $(SSDMODEL_LDFLAGS) \
+-                            $(LIBPARAM_LDFLAGS) $(LIBDDBG_LDFLAGS) 
++                            $(LIBPARAM_LDFLAGS) $(LIBDDBG_LDFLAGS) -lm
+ 
+ HP_FAST_OFLAGS = +O4
+ NCR_FAST_OFLAGS = -O4 -Hoff=BEHAVED 
+diff -ruN disksim-4.0/src/Makefile~ disksim-4.0/src/Makefile~
+--- disksim-4.0/src/Makefile~	1970-01-01 08:00:00.000000000 +0800
++++ disksim-4.0/src/Makefile~	2016-03-21 12:34:36.000000000 +0800
+@@ -0,0 +1,151 @@
++
++# DiskSim Storage Subsystem Simulation Environment (Version 4.0)
++# Revision Authors: John Bucy, Greg Ganger
++# Contributors: John Griffin, Jiri Schindler, Steve Schlosser
++#
++# Copyright (c) of Carnegie Mellon University, 2001-2008.
++#
++# This software is being provided by the copyright holders under the
++# following license. By obtaining, using and/or copying this software,
++# you agree that you have read, understood, and will comply with the
++# following terms and conditions:
++#
++# Permission to reproduce, use, and prepare derivative works of this
++# software is granted provided the copyright and "No Warranty" statements
++# are included with all reproductions and derivative works and associated
++# documentation. This software may also be redistributed without charge
++# provided that the copyright and "No Warranty" statements are included
++# in all redistributions.
++#
++# NO WARRANTY. THIS SOFTWARE IS FURNISHED ON AN "AS IS" BASIS.
++# CARNEGIE MELLON UNIVERSITY MAKES NO WARRANTIES OF ANY KIND, EITHER
++# EXPRESSED OR IMPLIED AS TO THE MATTER INCLUDING, BUT NOT LIMITED
++# TO: WARRANTY OF FITNESS FOR PURPOSE OR MERCHANTABILITY, EXCLUSIVITY
++# OF RESULTS OR RESULTS OBTAINED FROM USE OF THIS SOFTWARE. CARNEGIE
++# MELLON UNIVERSITY DOES NOT MAKE ANY WARRANTY OF ANY KIND WITH RESPECT
++# TO FREEDOM FROM PATENT, TRADEMARK, OR COPYRIGHT INFRINGEMENT.
++# COPYRIGHT HOLDERS WILL BEAR NO LIABILITY FOR ANY USE OF THIS SOFTWARE
++# OR DOCUMENTATION.
++
++BISON = bison
++FLEX = flex
++
++include .paths
++
++LDFLAGS = -L. -ldisksim $(DISKMODEL_LDFLAGS) $(MEMSMODEL_LDFLAGS) \
++                            $(SSDMODEL_LDFLAGS) \
++                            $(LIBPARAM_LDFLAGS) $(LIBDDBG_LDFLAGS) -lm
++
++HP_FAST_OFLAGS = +O4
++NCR_FAST_OFLAGS = -O4 -Hoff=BEHAVED 
++FREEBLOCKS_OFLAGS =
++DEBUG_OFLAGS = -g -DASSERTS # -DDEBUG=1
++PROF_OFLAGS = -g -DASSERTS -p
++GPROF_OFLAGS = -g -DASSERTS -pg
++CFLAGS = -I. $(DISKMODEL_CFLAGS) $(LIBPARAM_CFLAGS) $(LIBDDBG_CFLAGS) $(DEBUG_OFLAGS) $(FREEBLOCKS_OFLAGS) $(MEMSMODEL_CFLAGS) $(SSDMODEL_CFLAGS) -D_INLINE 
++
++FBSYSSIM_OFLAGS = -O6 -fomit-frame-pointer -fexpensive-optimizations -fschedule-insns2
++
++#CC = cc
++CC = gcc -Wall -Wno-unused -MD
++# because purify spits out warnings on stdout...
++CC-DEP = gcc $(LIBPARAM_CFLAGS) $(DISKMODEL_CFLAGS)
++
++# The following lines create a dependency target based on the state of 
++# the modules files. If the .c and .h files are not created, the dependency
++# target is modules which invokes "make -C modules". If the files are already
++# created, the target are the files themselves. 
++# This expression is to avoid remaaking of the libdisksim.a with ar and ranlib
++# even if no files have changed. 
++MODULEDEPS = $(wildcard modules/*.h modules/*.c)
++ifeq ($(MODULEDEPS),)
++MODULEDEPS = modules
++endif
++
++all: disksim rms hplcomb syssim
++
++clean:
++	rm -f TAGS *.o disksim syssim rms hplcomb core libdisksim.a
++	$(MAKE) -C modules clean
++
++realclean: clean
++	rm -f *.d .depend
++	$(MAKE) -C modules clean
++
++distclean: realclean
++	rm -f *~ *.a
++	rm -rf ../lib ../include
++	$(MAKE) -C modules distclean
++
++.PHONY: modules
++
++modules: 
++	$(MAKE) -C modules
++	mkdir -p ../include/disksim/modules
++	cp -pR modules/*.h ../include/disksim/modules
++	cp disksim_interface.h ../include
++
++modules/*.h modules/*.c:
++	$(MAKE) -C modules
++
++#include .depend
++
++DISKSIM_SRC = disksim.c disksim_intr.c disksim_pfsim.c \
++	disksim_pfdisp.c disksim_synthio.c disksim_iotrace.c disksim_iosim.c \
++	disksim_logorg.c disksim_redun.c disksim_ioqueue.c disksim_iodriver.c \
++	disksim_bus.c disksim_controller.c disksim_ctlrdumb.c \
++	disksim_ctlrsmart.c disksim_disk.c disksim_diskctlr.c \
++	disksim_diskcache.c \
++	disksim_statload.c disksim_stat.c disksim_rand48.c disksim_malloc.c \
++	disksim_cache.c disksim_cachemem.c disksim_cachedev.c \
++	disksim_simpledisk.c disksim_device.c \
++	disksim_loadparams.c \
++	raw_layout.c
++
++DISKSIM_OBJ = $(DISKSIM_SRC:.c=.o) 
++
++$(DISKSIM_OBJ): %.o: %.c
++	$(CC) -c $(CFLAGS) $< -o $@
++
++
++# production rule for making disksim with freeblocks support
++# FREEBLOCKS_OFLAGS = -DFREEBLOCKS
++fbdisksim :
++	$(MAKE) FREEBLOCKS_OFLAGS=-DFREEBLOCKS all
++
++rms : rms.c
++	$(CC) $< -lm -o $@
++
++hplcomb : hplcomb.c
++	$(CC) $< -o $@
++
++libdisksim.a: $(MODULEDEPS) $(DISKSIM_OBJ) disksim_interface.o
++	ar cru $@ $(DISKSIM_OBJ) disksim_interface.o modules/*.o
++	ranlib $@
++	mkdir -p ../lib
++	cp libdisksim.a ../lib
++
++disksim : $(MODULEDEPS) libdisksim.a disksim_main.o 
++	$(CC) $(CFLAGS) -o $@ disksim_main.o $(LDFLAGS)
++
++syssim: syssim_driver.o libdisksim.a
++	$(CC) $(CFLAGS) -o $@ syssim_driver.o disksim_interface.o $(LDFLAGS)
++
++########################################################################
++
++# rule to automatically generate dependencies from source files
++#%.d: %.c
++#	set -e; $(CC-DEP) -M $(CPPFLAGS) $<  \
++#		| sed 's/\($*\)\.o[ :]*/\1.o $@ : /g' > $@; \
++#		[ -s $@ ] 2>/dev/null >/dev/null || rm -f $@
++
++
++# this is a little less aggressive and annoying than the above
++depend: .depend 
++
++.depend: *.c *.h
++	$(MAKE) -C modules
++	rm -f .depend
++	$(foreach file, $(DISKSIM_SRC), \
++		$(CC-DEP) $(CFLAGS) -M $(file) >> .depend; )
++
